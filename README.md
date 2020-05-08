@@ -100,7 +100,7 @@ Initial release
 
 ## Source code
 
-Available on https://github.com/yasikovsky/ts-redux-ducks-generator.
+Available on https://github.com/yasikovsky/redux-ducks-generator.
 
 ## Questions?
 
