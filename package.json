@@ -12,6 +12,7 @@
 	"engines": {
 		"vscode": "^1.45.0"
 	},
+	"repository": {"url": "https://github.com/yasikovsky/redux-ducks-generator"},
 	"categories": [
 		"Snippets",
 		"Other"
