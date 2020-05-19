@@ -106,6 +106,7 @@ Either highlight an interface or open a file with an interface in the editor, pr
 ### 0.2.0 (2020-05-19)
 
 - Improved interface detection
+- Improved word splitting in property names
 - The extension now replaces everything after the first found interface, while leaving the interface and everything before it intact. This way you can just add a new property to the interface, run the extension, and an update reducer will be generated without extra clicks.
 
 ### 0.1.0 (2020-05-07)
