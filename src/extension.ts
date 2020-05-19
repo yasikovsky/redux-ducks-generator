@@ -14,6 +14,10 @@ function capitalize(text: string) {
 	return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function splitIntoWords(text: string, delimeter: string) {
+	return text.replace(/([a-z0-9])([A-Z])/g, `$1${delimeter}$2`);
+}
+
 function isInterface(text: string) {
 	let regex = /interface.*{.*}/gmis;
 	let groups = regex.exec(text);
@@ -100,11 +104,59 @@ function getInterface(text: string): TsInterface | undefined {
 	return undefined;
 }
 
+function findFirstInterface(text: string, lineOffset?: number) {
+	let startLine = -1;
+	let endLine = -1;
+	let foundOpeningBrace = false;
+	let openBraces = 0;
+	let interfaceFound = false;
+
+	let lines = text.split("\n");
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+
+		if (line.includes('interface')) {
+			if (interfaceFound) {
+				return null;
+			}
+			else {
+				interfaceFound = true;
+				startLine = i;
+			}
+		};
+
+		if (line.includes('{')) {
+			foundOpeningBrace = true;
+			openBraces++;
+		}
+
+		if (line.includes('}')) {
+			openBraces--;
+		}
+
+		if (interfaceFound && foundOpeningBrace && openBraces === 0) {
+			endLine = i;
+			break;
+		}
+	}
+
+	if (startLine >= 0 && endLine >= 0) {
+
+		if (lineOffset)
+			return new vscode.Range(new vscode.Position(startLine + lineOffset, 0), new vscode.Position(endLine + lineOffset, lines[endLine].length - 1));
+
+		return new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine + 1, lines[endLine].length - 1));
+	}
+
+	return null;
+}
+
 function generateDucks(iface: TsInterface): string {
 
 	let text = '';
 
-	text += '// Types\n\n';
+	text += '\n\n// Types\n\n';
 
 	text += `export interface ${iface.name}State {\n`;
 	iface.props.forEach(prop => {
@@ -125,7 +177,7 @@ function generateDucks(iface: TsInterface): string {
 
 	text += `export enum ${iface.name}ActionTypes {\n`;
 	iface.props.forEach((prop, index, array) => {
-		text += `\tSET_${prop.name.toLocaleUpperCase()} = "${iface.name.toLocaleLowerCase()}/set-${prop.name.toLocaleLowerCase()}",\n`;
+		text += `\tSET_${splitIntoWords(prop.name, "_").toUpperCase()} = "${iface.name.toLowerCase()}/set-${splitIntoWords(prop.name, "-").toLowerCase()}",\n`;
 	});
 	text += '}\n\n';
 
@@ -133,7 +185,7 @@ function generateDucks(iface: TsInterface): string {
 
 	iface.props.forEach(prop => {
 		text += `export function set${capitalize(prop.name)}(${prop.name}: ${prop.type}) : ${iface.name}Action {\n`;
-		text += `\treturn {...initial${iface.name}State, type: ${iface.name}ActionTypes.SET_${prop.name.toLocaleUpperCase()}, ${prop.name}: ${prop.name}};\n`;
+		text += `\treturn {...initial${iface.name}State, type: ${iface.name}ActionTypes.SET_${splitIntoWords(prop.name, "_").toUpperCase()}, ${prop.name}: ${prop.name}};\n`;
 		text += `}\n\n`;
 	});
 
@@ -142,7 +194,7 @@ function generateDucks(iface: TsInterface): string {
 	text += `const ${iface.name}Reducer = (state: ${iface.name}State = initial${iface.name}State, action: ${iface.name}Action) => {\n`;
 	text += `\tswitch(action.type) {\n`;
 	iface.props.forEach(prop => {
-		text += `\t\tcase ${iface.name}ActionTypes.SET_${prop.name.toLocaleUpperCase()}:\n`;
+		text += `\t\tcase ${iface.name}ActionTypes.SET_${splitIntoWords(prop.name, "_").toUpperCase()}:\n`;
 		text += `\t\t\treturn {...state, ${prop.name}: action.${prop.name}};\n`;
 	});
 	text += `\t\tdefault:\n`;
@@ -159,23 +211,25 @@ export function activate(context: vscode.ExtensionContext) {
 	let disposable = vscode.commands.registerCommand('redux-ducks-generator.ducks', () => {
 
 		let editedContent = '';
-
-		let startPosition = new vscode.Position(0, 0);
 		let editor = vscode.window.activeTextEditor;
 
+		let firstInterfaceRange: vscode.Range | null;
+
 		if (editor) {
+
 			if (editor.selection) {
 				let text = editor.document.getText(editor.selection);
-				if (isInterface(text)) {
-					editedContent = text;
-					startPosition = editor.selection.start;
+				firstInterfaceRange = findFirstInterface(text, editor.selection.start.line);
+				if (firstInterfaceRange) {
+					editedContent = editor.document.getText(firstInterfaceRange);
 				}
 			}
 
 			if (editedContent === '') {
 				let text = editor.document.getText();
-				if (isInterface(text)) {
-					editedContent = text;
+				firstInterfaceRange = findFirstInterface(text);
+				if (firstInterfaceRange) {
+					editedContent = editor.document.getText(firstInterfaceRange);
 				}
 			}
 
@@ -190,8 +244,10 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		let iface = getInterface(editedContent);
+		let startPosition = firstInterfaceRange!.end;
 		let endPosition = new vscode.Position(editor.document.lineCount - 1, editor.document.lineAt(editor.document.lineCount - 1).range.end.character);
+
+		let iface = getInterface(editedContent);
 
 		if (iface) {
 			let newContent = generateDucks(iface);
